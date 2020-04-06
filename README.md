@@ -29,6 +29,19 @@ sudo semodule -i myjupyterhubd.pp
 
 the module gets activated; this command takes up to a minute to complete. You could alsp copy the .pp-file into your SELinux module dir and reload SELinux policies.
 
+### Configuration
+
+When the module is installed you need to change the security context of some files: the jupyterhub executable script, your jupyterhub configuration .py-file and the jupyterhub_cookie_secret.
+
+```
+sudo chcon -t jupyterhubd_exec_t /opt/jupyterhub/bin/jupyterhub
+sudo chcon -t jupyterhubd_etc_t /opt/jupyterhub/etc/jupyterhub
+sudo chcon -t jupyterhubd_etc_t /opt/jupyterhub/etc/jupyterhub/jupyterhub_config.py
+sudo chcon -t jupyterhubd_secret_t /jupyterhub_cookie_secret
+```
+
+Now you can restart jupyterhub via systemd and check if everything works. Search also the audit logs, when something is not working and look out for avc denied messages.
+
 ## Useful ressources
 * https://wiki.gentoo.org/wiki/SELinux/Tutorials
 * http://seedit.sourceforge.net/doc/access_vectors/
