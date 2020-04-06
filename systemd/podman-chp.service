@@ -1,0 +1,15 @@
+[Unit]
+Description=Podman container-chp.service
+Documentation=man:podman-generate-systemd(1)
+After=network-online.target
+
+[Service]
+User=chp
+Restart=on-failure
+Environment="https_proxy=<proxy>"
+ExecStart=/usr/bin/podman run --name chp --rm -p 8000:8000 -p 8001:8001 --env-file /home/chp/env-file.env --net=host --http-proxy=false docker.io/jupyterhub/configurable-http-proxy
+ExecStop=/usr/bin/podman stop -t 10 chp
+KillMode=none
+
+[Install]
+WantedBy=multi-user.target

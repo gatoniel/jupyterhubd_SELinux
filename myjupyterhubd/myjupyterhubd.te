@@ -1,0 +1,143 @@
+policy_module(myjupyterhubd, 1.0)
+
+gen_require(`
+         type bin_t;
+         type unconfined_t;
+         type fs_t;
+         attribute polydomain;
+         attribute nsswitch_domain;
+         attribute login_pgm;
+         attribute can_change_object_identity;
+         attribute can_change_process_identity;
+         attribute can_change_process_role;
+         attribute corenet_unlabeled_type;
+         attribute domain;
+         attribute kernel_system_state_reader;
+         attribute netlabel_peer_type;
+         attribute privfd;
+         attribute daemon;
+         attribute syslog_client_type;
+         attribute pcmcia_typeattr_1;
+         attribute unconfined_login_domain;
+         attribute userdom_home_manager_type;
+         attribute entry_type;
+         attribute exec_type;
+         attribute file_type;
+         attribute non_auth_file_type;
+         attribute non_security_file_type;
+         attribute direct_init_entry;
+
+         attribute application_exec_type;
+
+         type sysctl_fs_t;
+
+         type tmp_t;
+         type tmpfs_t;
+         type usr_t;
+
+         type mysqld_port_t;
+
+         attribute port_type;
+         attribute unreserved_port_type;
+         type ephemeral_port_t;
+
+         type shadow_t;
+
+         type lastlog_t;
+
+         type systemd_logind_t;
+
+         type container_runtime_t;
+         type container_runtime_exec_t;
+
+         type systemd_logind_sessions_t;
+')
+
+# jupyterhubd_t and jupyterhubd_exec_t get the same attributes as sshd_t, and sshd_exec_t
+type jupyterhubd_t, polydomain, nsswitch_domain, login_pgm, can_change_object_identity, can_change_process_identity, can_change_process_role, corenet_unlabeled_type, domain, kernel_system_state_reader, netlabel_peer_type, privfd, daemon, syslog_client_type, pcmcia_typeattr_1, unconfined_login_domain, userdom_home_manager_type;
+type jupyterhubd_exec_t, entry_type, exec_type, file_type, non_auth_file_type, non_security_file_type, direct_init_entry;
+# lets add some file_types for the config file and the cookie secret
+type jupyterhubd_etc_t, file_type;
+type jupyterhubd_secret_t, file_type;
+
+# also make some special ports
+type jupyterhubd_connect_port_t, port_type, unreserved_port_type;
+type jupyterhubd_bind_port_t, port_type, unreserved_port_type;
+
+# transition to jupyterhubd_t when started by systemd...
+init_daemon_domain(jupyterhubd_t, jupyterhubd_exec_t)
+allow jupyterhubd_t jupyterhubd_etc_t:file { open read getattr ioctl };
+allow jupyterhubd_t jupyterhubd_etc_t:dir { read search };
+allow jupyterhubd_t jupyterhubd_secret_t:file { open read getattr ioctl write };
+# /opt/jupyterhub/bin/jupyterhub is a script that calls the python executable with type bin_t
+allow jupyterhubd_t bin_t:file { map execute };
+
+# allow relabeling of files that already exist, also allow read and write access to unconfined_t, so root can still acces the data
+allow unconfined_t jupyterhubd_etc_t:file { open read write rename unlink setattr getattr relabelto };
+allow unconfined_t jupyterhubd_etc_t:dir { open read write rename unlink setattr getattr search relabelto };
+allow unconfined_t jupyterhubd_secret_t:file { open read write rename unlink setattr getattr relabelto };
+# this was needed for the relabeling procedure
+allow jupyterhubd_etc_t fs_t:filesystem { associate };
+allow jupyterhubd_secret_t fs_t:filesystem { associate };
+
+# allow usage of application_exex_type and exec_type, this is needed to load all the libs and modules of python...
+allow jupyterhubd_t application_exec_type:file { execute execute_no_trans getattr ioctl lock map open read };
+allow jupyterhubd_t exec_type:file { execute execute_no_trans getattr ioctl lock map open read };
+
+# allow sysctl
+allow jupyterhubd_t sysctl_fs_t:dir { getattr open search };
+
+# allow tmp files and dirs
+allow jupyterhubd_t tmp_t:dir { add_name getattr ioctl lock open read remove_name search write create rmdir };
+allow jupyterhubd_t tmpfs_t:dir { add_name getattr ioctl lock open read remove_name search write create };
+allow jupyterhubd_t tmp_t:file { read write open create append map unlink execute };
+allow jupyterhubd_t tmpfs_t:file { read write open create append map unlink execute };
+# write to usr
+allow jupyterhubd_t usr_t:file { open write setattr create rename unlink };
+
+# allow mysql connection
+allow jupyterhubd_t mysqld_port_t:tcp_socket { name_connect recv_msg send_msg };
+
+
+# allow connection to chp ports
+allow jupyterhubd_t jupyterhubd_connect_port_t:tcp_socket { name_connect recv_msg send_msg };
+
+# allow to bind to a port
+allow jupyterhubd_t jupyterhubd_bind_port_t:tcp_socket { name_bind recv_msg send_msg };
+# after binding the port becomes same type as process, at least thats what I think
+allow jupyterhubd_t jupyterhubd_t:tcp_socket { accept append bind connect create getattr getopt ioctl listen lock read setattr setopt shutdown write };
+
+# allow connetions to jupyter single server notebooks
+allow jupyterhubd_t ephemeral_port_t:tcp_socket { name_connect recv_msg send_msg };
+
+# read shadow files
+allow jupyterhubd_t shadow_t:file { open read getattr };
+
+# we also want to change our uid, gid etc...
+allow jupyterhubd_t jupyterhubd_t:capability { setuid setgid audit_write audit_control dac_override dac_read_search };
+
+# make something with childprocesses
+allow jupyterhubd_t jupyterhubd_t:process { setexec setsched };
+
+# read and open lastlog_t file for pam_lastlog
+allow jupyterhubd_t lastlog_t:file { open read getattr };
+
+# this is all to use pam_open_session with pam_systemd.so
+# send_msg to systemd_logind and back
+# https://lists.fedoraproject.org/pipermail/selinux/2013-March/015255.html
+dbus_stub()
+allow jupyterhubd_t systemd_logind_t:dbus { send_msg };
+allow systemd_logind_t jupyterhubd_t:dbus { send_msg };
+# write something to session fifo_files... copied from sshd_t
+allow jupyterhubd_t systemd_logind_sessions_t:fifo_file write;
+
+# use containers as entrypoints and make the transitions
+allow jupyterhubd_t container_runtime_exec_t:file { entrypoint execute execute_no_trans getattr ioctl map open read };
+allow jupyterhubd_t container_runtime_t:process { transition };
+type_transition jupyterhubd_t container_runtime_exec_t : process container_runtime_t;
+
+#*** TODO ***
+# make the correct transition for other use cases like single notebook directly on host
+
+# get rid of last avc messages. I do not understand what this does...
+allow jupyterhubd_t unconfined_t:process { siginh noatsecure };
