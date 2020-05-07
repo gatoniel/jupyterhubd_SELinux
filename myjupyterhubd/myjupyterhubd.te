@@ -102,8 +102,8 @@ allow jupyterhubd_t mysqld_port_t:tcp_socket { name_connect recv_msg send_msg };
 # allow connection to chp ports
 allow jupyterhubd_t jupyterhubd_connect_port_t:tcp_socket { name_connect recv_msg send_msg };
 
-# allow to bind to a port
-allow jupyterhubd_t jupyterhubd_bind_port_t:tcp_socket { name_bind recv_msg send_msg };
+# allow to bind to a port and connect to that port, if JupyterHub managed services want to connect to the Hub REST API
+allow jupyterhubd_t jupyterhubd_bind_port_t:tcp_socket { name_bind name_connect recv_msg send_msg };
 # after binding the port becomes same type as process, at least thats what I think
 allow jupyterhubd_t jupyterhubd_t:tcp_socket { accept append bind connect create getattr getopt ioctl listen lock read setattr setopt shutdown write };
 
